@@ -1,0 +1,143 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  NUTRITIONIST
+  ADMIN
+}
+
+enum FoodSource {
+  USDA
+  CUSTOM
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  name      String
+  password  String
+  role      Role     @default(USER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // User profile information
+  dateOfBirth DateTime?
+  height      Float? // in cm
+  weight      Float? // in kg
+  gender      String?
+  activityLevel String? // sedentary, lightly_active, moderately_active, very_active, extra_active
+  goals       String? // maintain, lose, gain
+
+  // Relationship with nutritionist
+  assignedNutritionistId Int?
+  assignedNutritionist   User? @relation("UserNutritionist", fields: [assignedNutritionistId], references: [id])
+  assignedUsers          User[] @relation("UserNutritionist")
+
+  // User's meal entries
+  mealEntries MealEntry[]
+
+  // Comments made by this user (if nutritionist)
+  comments Comment[]
+
+  @@map("users")
+}
+
+model Food {
+  id          Int        @id @default(autoincrement())
+  name        String
+  brand       String?
+  description String?
+  source      FoodSource @default(CUSTOM)
+  
+  // Nutritional information per 100g
+  calories    Float
+  protein     Float      @default(0) // in grams
+  fat         Float      @default(0) // in grams
+  carbs       Float      @default(0) // in grams
+  fiber       Float      @default(0) // in grams
+  sugar       Float      @default(0) // in grams
+  sodium      Float      @default(0) // in mg
+  
+  // Additional nutrients (optional)
+  vitaminA    Float?     // in mcg
+  vitaminC    Float?     // in mg
+  calcium     Float?     // in mg
+  iron        Float?     // in mg
+  
+  // USDA specific data
+  usdaFdcId   Int?       @unique
+  
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  // Meal entries using this food
+  mealEntries MealEntry[]
+
+  @@map("foods")
+}
+
+model MealEntry {
+  id       Int      @id @default(autoincrement())
+  userId   Int
+  foodId   Int
+  quantity Float    // in grams
+  date     DateTime @default(now())
+  mealType String?  // breakfast, lunch, dinner, snack
+  notes    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  food     Food      @relation(fields: [foodId], references: [id])
+  comments Comment[]
+
+  @@map("meal_entries")
+}
+
+model Comment {
+  id          Int      @id @default(autoincrement())
+  mealEntryId Int
+  authorId    Int      // nutritionist who made the comment
+  message     String
+  isPrivate   Boolean  @default(false) // if true, only visible to the user and nutritionist
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  mealEntry MealEntry @relation(fields: [mealEntryId], references: [id], onDelete: Cascade)
+  author    User      @relation(fields: [authorId], references: [id])
+
+  @@map("comments")
+}
+
+// Optional: Daily nutrition summaries for better performance
+model DailyNutritionSummary {
+  id     Int      @id @default(autoincrement())
+  userId Int
+  date   DateTime @db.Date
+
+  totalCalories Float @default(0)
+  totalProtein  Float @default(0)
+  totalFat      Float @default(0)
+  totalCarbs    Float @default(0)
+  totalFiber    Float @default(0)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, date])
+  @@map("daily_nutrition_summaries")
+}
