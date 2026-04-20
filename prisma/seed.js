@@ -164,13 +164,10 @@ async function main() {
   ]
 
   for (const foodData of foods) {
-    await prisma.food.upsert({
-      where: { 
-        name: foodData.name 
-      },
-      update: {},
-      create: foodData
-    })
+    const existing = await prisma.food.findFirst({ where: { name: foodData.name, source: 'CUSTOM' } })
+    if (!existing) {
+      await prisma.food.create({ data: foodData })
+    }
   }
   console.log('✅ Seeded basic food items')
 

@@ -1,5 +1,9 @@
 import api from './api'
 
+export const getNutritionistStats = () => {
+  return api.get('/users/nutritionist-stats')
+}
+
 export const getUsers = (params = {}) => {
   return api.get('/users', { params })
 }

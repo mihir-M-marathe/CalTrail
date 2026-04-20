@@ -24,8 +24,8 @@ router.get('/', authorize('NUTRITIONIST', 'ADMIN'), async (req, res, next) => {
     
     if (search) {
       where.OR = [
-        { name: { contains: search, mode: 'insensitive' } },
-        { email: { contains: search, mode: 'insensitive' } }
+        { name: { contains: search } },
+        { email: { contains: search } }
       ];
     }
 
@@ -71,6 +71,104 @@ router.get('/', authorize('NUTRITIONIST', 'ADMIN'), async (req, res, next) => {
           total: Math.ceil(total / limit),
           count: total
         }
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// @route   GET /api/users/nutritionist-stats
+// @desc    Get dashboard stats for the logged-in nutritionist
+// @access  Private (Nutritionist only)
+router.get('/nutritionist-stats', authorize('NUTRITIONIST'), async (req, res, next) => {
+  try {
+    const nutritionistId = req.user.id;
+
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const todayEnd = new Date(todayStart);
+    todayEnd.setDate(todayEnd.getDate() + 1);
+
+    const weekStart = new Date(todayStart);
+    weekStart.setDate(weekStart.getDate() - 7);
+
+    const threeDaysAgo = new Date(todayStart);
+    threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+
+    // All assigned users
+    const assignedUsers = await prisma.user.findMany({
+      where: { assignedNutritionistId: nutritionistId },
+      select: { id: true, name: true, email: true }
+    });
+
+    const assignedUserIds = assignedUsers.map(u => u.id);
+
+    // Run counts in parallel
+    const [commentsToday, activeUsersToday, weeklyInteractions, recentMeals] = await Promise.all([
+      // Comments this nutritionist made today
+      prisma.comment.count({
+        where: {
+          authorId: nutritionistId,
+          createdAt: { gte: todayStart, lt: todayEnd }
+        }
+      }),
+      // Distinct assigned users who logged at least one meal today
+      prisma.mealEntry.findMany({
+        where: {
+          userId: { in: assignedUserIds },
+          date: { gte: todayStart, lt: todayEnd }
+        },
+        select: { userId: true },
+        distinct: ['userId']
+      }),
+      // Total meal entries logged by assigned users this week
+      prisma.mealEntry.count({
+        where: {
+          userId: { in: assignedUserIds },
+          date: { gte: weekStart }
+        }
+      }),
+      // Last 5 meal entries from assigned users (for recent activity feed)
+      prisma.mealEntry.findMany({
+        where: { userId: { in: assignedUserIds } },
+        include: {
+          user: { select: { id: true, name: true } },
+          food: { select: { name: true, calories: true } }
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 5
+      })
+    ]);
+
+    // Users who haven't logged any meal in the last 3 days
+    const recentlyActiveUserIds = await prisma.mealEntry.findMany({
+      where: {
+        userId: { in: assignedUserIds },
+        date: { gte: threeDaysAgo }
+      },
+      select: { userId: true },
+      distinct: ['userId']
+    });
+    const recentlyActiveSet = new Set(recentlyActiveUserIds.map(e => e.userId));
+    const usersNeedingAttention = assignedUsers.filter(u => !recentlyActiveSet.has(u.id));
+
+    res.json({
+      success: true,
+      data: {
+        assignedUsersCount: assignedUsers.length,
+        commentsToday,
+        activeUsersToday: activeUsersToday.length,
+        weeklyInteractions,
+        recentActivity: recentMeals.map(entry => ({
+          userId: entry.user.id,
+          userName: entry.user.name,
+          foodName: entry.food.name,
+          calories: Math.round((entry.food.calories * entry.quantity) / 100),
+          mealType: entry.mealType,
+          createdAt: entry.createdAt
+        })),
+        usersNeedingAttention: usersNeedingAttention.map(u => ({ id: u.id, name: u.name }))
       }
     });
   } catch (error) {

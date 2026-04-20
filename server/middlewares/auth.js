@@ -73,12 +73,12 @@ const authorizeNutritionistAccess = async (req, res, next) => {
     const currentUser = req.user;
 
     // Admin can access everything
-    if (currentUser.role === 'admin') {
+    if (currentUser.role === 'ADMIN') {
       return next();
     }
 
     // Users can only access their own data
-    if (currentUser.role === 'user' && currentUser.id !== parseInt(userId)) {
+    if (currentUser.role === 'USER' && currentUser.id !== parseInt(userId)) {
       return res.status(403).json({
         success: false,
         error: 'Access denied. You can only access your own data.'
@@ -86,7 +86,7 @@ const authorizeNutritionistAccess = async (req, res, next) => {
     }
 
     // Nutritionists can only access their assigned users
-    if (currentUser.role === 'nutritionist') {
+    if (currentUser.role === 'NUTRITIONIST') {
       const targetUser = await prisma.user.findUnique({
         where: { id: parseInt(userId) }
       });

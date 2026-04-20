@@ -11,7 +11,6 @@ const userRoutes = require('./routes/users');
 const foodRoutes = require('./routes/foods');
 const mealRoutes = require('./routes/meals');
 const commentRoutes = require('./routes/comments');
-
 // Import middleware
 const errorHandler = require('./middlewares/errorHandler');
 const notFound = require('./middlewares/notFound');
